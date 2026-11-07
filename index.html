@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Literature database</title>
+<style>
+:root{--bg:#fbfbf9;--ink:#1d2433;--mute:#667085;--line:#dcdcd4;--head:#eef0ea;--accent:#1f5f5b;--row:#f5f6f1}
+@media (prefers-color-scheme:dark){:root{--bg:#14181f;--ink:#e6e8ec;--mute:#9aa3b2;--line:#2b323d;--head:#1c222c;--accent:#6fc2bb;--row:#181d26}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header,.tools,.wrap{padding-left:clamp(14px,3vw,36px);padding-right:clamp(14px,3vw,36px)}
+header{padding-top:28px}
+h1{font:600 28px/1.2 Georgia,"Times New Roman",serif;margin:0 0 6px}
+header p{margin:0;color:var(--mute);max-width:70ch}
+.tools{display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding-top:18px;padding-bottom:14px}
+.tools label{display:flex;flex-direction:column;font-size:12.5px;color:var(--mute);gap:3px}
+input,select,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+input[type=search]{min-width:240px}
+button{cursor:pointer}button:hover{border-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.count{margin-left:auto;color:var(--mute);font-size:13px}
+.wrap{overflow-x:auto;padding-bottom:40px}
+table{border-collapse:collapse;width:100%;min-width:1100px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+th{background:var(--head);position:sticky;top:0;white-space:nowrap;cursor:pointer;user-select:none;font-weight:600;font-size:13.5px}
+th[aria-sort=ascending]::after{content:" ▲";color:var(--accent)}
+th[aria-sort=descending]::after{content:" ▼";color:var(--accent)}
+tbody tr:nth-child(even){background:var(--row)}
+td a{color:var(--accent)}
+.v{display:inline-block;margin:0 4px 3px 0;padding:0 7px;border:1px solid var(--line);border-radius:10px;font-size:13px;white-space:nowrap}
+.long{min-width:220px;max-width:340px}
+.empty{padding:30px 10px;color:var(--mute)}
+.note{color:var(--mute);font-size:13px;padding:0 clamp(14px,3vw,36px) 10px}
+</style>
+</head>
+<body>
+<header>
+<h1>Literature database</h1>
+<p>One row per paper. Click a column heading to sort, use the search box to find text anywhere, or pick a value to filter.</p>
+</header>
+<div class="tools" id="tools"></div>
+<div class="note" id="note" hidden></div>
+<div class="wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table><div class="empty" id="empty" hidden>No papers match these filters.</div></div>
+
+<!-- Sample copy of the data, used only when data/papers.csv cannot be loaded (e.g. opening this file by double-click). -->
+<script type="text/plain" id="fallback">ID,Authors,Year,Title,Journal,DOI,Language,Forms examined,Examples,Stereotypes,RQ focus,Method,Sample size,Participant country of residence,Adults or children,Data/code availability,Key findings,Notes
+Tibblin et al. 2023b,"Tibblin, Julia; Granfeldt, Jonas; van de Weijer, Joost; Gygax, Pascal",2023,[TITLE HERE],Glossa Psycholinguistics,10.5070/G60111267,French,Masculine; Complete doublets; Contracted doublets; Neutral forms,joggeuses et joggeurs; joggeur·euses; groupe de jogging,Neutral,Mental representations,Sentence-evaluation task,153,France,Adults,Yes,,
+</script>
+
+<script>
+const CSV_PATH = "data/papers.csv";
+const MULTI = ["Authors","Language","Forms examined","Examples","Stereotypes","RQ focus","Method"]; // split on ";"
+const FILTERS = ["Language","Forms examined","Stereotypes","RQ focus","Method","Participant country of residence","Adults or children","Data/code availability"];
+const NUMERIC = ["Year","Sample size"];
+const LONG = ["Title","Key findings","Notes","Examples","Authors"];
+let H = [], rows = [], sortCol = null, sortDir = 1, filt = {}, q = "";
+
+function parseCSV(t){
+  const out=[];let r=[],f="",inQ=false;
+  t=t.replace(/^\uFEFF/,"");
+  for(let i=0;i<t.length;i++){
+    const c=t[i];
+    if(inQ){ if(c=='"'){ if(t[i+1]=='"'){f+='"';i++} else inQ=false } else f+=c }
+    else if(c=='"') inQ=true;
+    else if(c==","){r.push(f);f=""}
+    else if(c=="\n"||c=="\r"){ if(c=="\r"&&t[i+1]=="\n")i++; r.push(f);f="";out.push(r);r=[] }
+    else f+=c;
+  }
+  if(f!==""||r.length){r.push(f);out.push(r)}
+  return out.filter(x=>x.some(v=>v.trim()!==""));
+}
+const parts = (col,v)=> MULTI.includes(col) ? v.split(";").map(s=>s.trim()).filter(Boolean) : (v.trim()?[v.trim()]:[]);
+const esc = s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function load(text, fromFallback){
+  const t=parseCSV(text); H=t[0].map(s=>s.trim());
+  rows=t.slice(1).map(r=>Object.fromEntries(H.map((h,i)=>[h,(r[i]||"").trim()])));
+  if(fromFallback){const n=document.getElementById("note");n.hidden=false;n.textContent="Showing the built-in sample row because data/papers.csv could not be loaded here. On GitHub Pages it will load your CSV automatically."}
+  buildUI(); render();
+}
+function buildUI(){
+  const tools=document.getElementById("tools");
+  tools.innerHTML='<label>Search<input type="search" id="q" placeholder="Any text, any column"></label>';
+  FILTERS.filter(c=>H.includes(c)).forEach(c=>{
+    const vals=[...new Set(rows.flatMap(r=>parts(c,r[c])))].sort((a,b)=>a.localeCompare(b));
+    const l=document.createElement("label");l.textContent=c;
+    const s=document.createElement("select");
+    s.innerHTML='<option value="">All</option>'+vals.map(v=>`<option>${esc(v)}</option>`).join("");
+    s.onchange=()=>{filt[c]=s.value;render()};
+    l.appendChild(s);tools.appendChild(l);
+  });
+  const reset=document.createElement("button");reset.textContent="Clear filters";
+  reset.onclick=()=>{q="";filt={};sortCol=null;buildUI();render()};
+  const dl=document.createElement("a");dl.href=CSV_PATH;dl.download="papers.csv";dl.innerHTML="<button type='button'>Download CSV</button>";
+  const cnt=document.createElement("span");cnt.className="count";cnt.id="count";
+  tools.append(reset,dl,cnt);
+  document.getElementById("q").oninput=e=>{q=e.target.value.toLowerCase();render()};
+  const tr=document.createElement("tr");
+  H.forEach(h=>{
+    const th=document.createElement("th");th.textContent=h;th.tabIndex=0;th.dataset.col=h;
+    const go=()=>{sortDir=(sortCol===h)?-sortDir:1;sortCol=h;render()};
+    th.onclick=go;th.onkeydown=e=>{if(e.key=="Enter"||e.key==" "){e.preventDefault();go()}};
+    tr.appendChild(th);
+  });
+  const th=document.getElementById("thead");th.innerHTML="";th.appendChild(tr);
+}
+function cell(h,v){
+  if(!v) return "";
+  if(h==="DOI"){const d=v.replace(/^https?:\/\/(dx\.)?doi\.org\//,"");return `<a href="https://doi.org/${encodeURI(d)}" target="_blank" rel="noopener">${esc(d)}</a>`}
+  if(/^https?:\/\//.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+  if(["Language","Forms examined","Stereotypes","RQ focus","Method"].includes(h)) return parts(h,v).map(x=>`<span class="v">${esc(x)}</span>`).join("");
+  if(h==="Authors") return esc(parts(h,v).join("; "));
+  if(h==="Examples") return esc(parts(h,v).join(" · "));
+  return esc(v);
+}
+function render(){
+  let out=rows.filter(r=>{
+    if(q && !H.some(h=>r[h].toLowerCase().includes(q))) return false;
+    return Object.entries(filt).every(([c,v])=>!v||parts(c,r[c]).includes(v));
+  });
+  if(sortCol){
+    const num=NUMERIC.includes(sortCol);
+    out.sort((a,b)=>{
+      const x=a[sortCol],y=b[sortCol];
+      if(x===""&&y==="")return 0; if(x==="")return 1; if(y==="")return -1; // blanks last
+      return (num?(parseFloat(x)-parseFloat(y)):x.localeCompare(y,undefined,{numeric:true,sensitivity:"base"}))*sortDir;
+    });
+  }
+  document.getElementById("tbody").innerHTML=out.map(r=>"<tr>"+H.map(h=>`<td class="${LONG.includes(h)?"long":""}">${cell(h,r[h])}</td>`).join("")+"</tr>").join("");
+  document.getElementById("empty").hidden=out.length>0;
+  document.getElementById("count").textContent=`${out.length} of ${rows.length} papers`;
+  document.querySelectorAll("th").forEach(th=>{
+    if(th.dataset.col===sortCol)th.setAttribute("aria-sort",sortDir>0?"ascending":"descending");else th.removeAttribute("aria-sort");
+  });
+}
+fetch(CSV_PATH).then(r=>{if(!r.ok)throw 0;return r.text()}).then(t=>load(t,false))
+  .catch(()=>load(document.getElementById("fallback").textContent,true));
+</script>
+</body>
+</html>
