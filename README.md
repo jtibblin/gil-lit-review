@@ -87,7 +87,7 @@ It also warns about placeholder text, stray spaces, and author names not written
 
 If you use this database, please cite it as:
 
-> [Tibblin, Julia] ([2026]). *[Database title]* (Version [0.1]) [Data set]. GitHub. https://github.com/[jtibblin]/[gil-lit-review]
+> Tibblin, Julia (2026). *[Database title]* (Version 0.1) [Data set]. GitHub. https://github.com/jtibblin/gil-lit-review
 
 [If you archive releases on Zenodo, put the DOI here instead.]
 
@@ -95,7 +95,7 @@ Please also cite the original papers when you use their findings.
 
 ## License
 
-The data are released under [CC BY NC SA] (see `LICENSE`). [The code in `index.html` and `scripts/` is released under the MIT License.]
+The data are released under CC BY NC SA license (see `LICENSE`). [The code in `index.html` and `scripts/` is released under the MIT License.]
 
 ## Contact
 
