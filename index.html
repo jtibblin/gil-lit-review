@@ -27,6 +27,12 @@ th{background:var(--head);position:sticky;top:0;white-space:nowrap;cursor:pointe
 th[aria-sort=ascending]::after{content:" ▲";color:var(--accent)}
 th[aria-sort=descending]::after{content:" ▼";color:var(--accent)}
 tbody tr:nth-child(even){background:var(--row)}
+  /* Pinned first column */
+th:first-child,td:first-child{position:sticky;left:0;z-index:1;white-space:nowrap;border-right:1px solid var(--line)}
+th:first-child{z-index:2}
+td:first-child{background:var(--bg)}
+tbody tr:nth-child(even) td:first-child{background:var(--row)}
+
 td a{color:var(--accent)}
 .v{display:inline-block;margin:0 4px 3px 0;padding:0 7px;border:1px solid var(--line);border-radius:10px;font-size:13px;white-space:nowrap}
 .long{min-width:220px;max-width:340px}
